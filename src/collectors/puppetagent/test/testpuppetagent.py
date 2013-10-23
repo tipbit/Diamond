@@ -5,6 +5,7 @@
 from test import CollectorTestCase
 from test import get_collector_config
 from test import unittest
+from test import run_only
 from mock import patch
 
 from diamond.collector import Collector
@@ -13,23 +14,31 @@ from puppetagent import PuppetAgentCollector
 ################################################################################
 
 
+def run_only_if_yaml_is_available(func):
+    try:
+        import yaml
+        yaml  # workaround for pyflakes issue #13
+    except ImportError:
+        yaml = None
+    pred = lambda: yaml is not None
+    return run_only(func, pred)
+
+
 class TestPuppetAgentCollector(CollectorTestCase):
     def setUp(self):
         config = get_collector_config('PuppetAgentCollector', {
-            'interval': 10
+            'interval': 10,
+            'yaml_path': self.getFixturePath('last_run_summary.yaml')
         })
 
         self.collector = PuppetAgentCollector(config, None)
 
-        self.last_run_fixture = self.getFixture('last_run_summary.yaml')
-
     def test_import(self):
         self.assertTrue(PuppetAgentCollector)
 
-    @patch('__builtin__.open')
+    @run_only_if_yaml_is_available
     @patch.object(Collector, 'publish')
-    def test(self, publish_mock, open_mock):
-        open_mock.return_value = self.last_run_fixture
+    def test(self, publish_mock):
 
         self.collector.collect()
 
@@ -74,6 +83,7 @@ class TestPuppetAgentCollector(CollectorTestCase):
         self.setDocExample(collector=self.collector.__class__.__name__,
                            metrics=metrics,
                            defaultpath=self.collector.config['path'])
+
         self.assertPublishedMany(publish_mock, metrics)
         #self.assertUnpublishedMany(publish_mock, unpublished_metrics)
 

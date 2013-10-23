@@ -12,10 +12,16 @@ Collect stats via MX4J from Kafka
 import urllib2
 
 from urllib import urlencode
-from xml.etree import ElementTree
+
+try:
+    from xml.etree import ElementTree
+    ElementTree  # workaround for pyflakes issue #13
+except ImportError:
+    ElementTree = None
 
 try:
     from ElementTree import ParseError as ETParseError
+    ETParseError  # workaround for pyflakes issue #13
 except ImportError:
     ETParseError = Exception
 
@@ -65,7 +71,8 @@ class KafkaCollector(diamond.collector.Collector):
         return config
 
     def _get(self, path, query_args=None):
-        path = path if path.startswith('/') else '/' + path
+        if not path.startswith('/'):
+            path = '/' + path
 
         qargs = {'template': 'identity'}
 
@@ -142,6 +149,10 @@ class KafkaCollector(diamond.collector.Collector):
         return metrics
 
     def collect(self):
+        if ElementTree is None:
+            self.log.error('Failed to import xml.etree.ElementTree')
+            return
+
         # Get list of gatherable stats
         mbeans = self.get_mbeans()
 

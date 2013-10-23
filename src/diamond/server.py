@@ -106,7 +106,7 @@ class Server(object):
                 # Initialize Handler class
                 self.handlers.append(cls(handler_config))
 
-            except ImportError:
+            except (ImportError, SyntaxError):
                 # Log Error
                 self.log.debug("Failed to load handler %s. %s", h,
                                traceback.format_exc())
@@ -132,8 +132,9 @@ class Server(object):
         # Verify the path is valid
         if not os.path.isdir(path):
             return
-        # Add path to the system path
-        sys.path.append(path)
+        # Add path to the system path, to avoid name clashes
+        # with mysql-connector for example ...
+        sys.path.insert(1, path)
         # Load all the files in path
         for f in os.listdir(path):
             # Are we a directory? If so process down the tree
@@ -197,7 +198,7 @@ class Server(object):
                 try:
                     # Import the module
                     mod = __import__(modname, globals(), locals(), ['*'])
-                except ImportError:
+                except (ImportError, SyntaxError):
                     # Log error
                     self.log.error("Failed to import module: %s. %s", modname,
                                    traceback.format_exc())
