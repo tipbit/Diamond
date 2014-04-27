@@ -10,6 +10,7 @@ Collect folsom stats
 """
 
 import urllib2
+import socket
 from types import *
 
 try:
@@ -28,7 +29,8 @@ class FolsomCollector(diamond.collector.Collector):
                             self).get_default_config_help()
         config_help.update({
             'host': "",
-            'port': ""
+            'port': "",
+            'timeout': ""
         })
         return config_help
 
@@ -39,7 +41,8 @@ class FolsomCollector(diamond.collector.Collector):
         config = super(FolsomCollector, self).get_default_config()
         config.update({
             'host':     '127.0.0.1',
-            'port':     5565
+            'port':     5565,
+            'timeout':  10
         })
         return config
 
@@ -60,12 +63,15 @@ class FolsomCollector(diamond.collector.Collector):
 
     def _http_get(self, url):
         try:
-            response = urllib2.urlopen(url)
+            response = urllib2.urlopen(url, timeout=int(self.config['timeout']))
             jresponse = json.load(response)
             #self.log.debug('http GET %s -> %s' % (url, jresponse))
             return jresponse
         except urllib2.HTTPError, err:
             self.log.error("%s: %s", url, err)
+            return False
+        except socket.timeout, err:
+            self.log.error("socket timeout %s: %s", url, err)
             return False
         except (TypeError, ValueError):
             self.log.error("Unable to parse response from folsom as a"
@@ -89,6 +95,7 @@ class FolsomCollector(diamond.collector.Collector):
 
         # get _dump
         result = self._get_dump()
+        #self.log.debug('_dump %s' % (result))
         if result:
             metrics = {}
             for metric in result:
@@ -107,6 +114,7 @@ class FolsomCollector(diamond.collector.Collector):
 
         # get _nodes/_memory
         result = self._get_memory()
+        #self.log.debug('_memory %s' % (result))
         if result:
             for node in result:
                 for metric in result[node]:
@@ -116,6 +124,7 @@ class FolsomCollector(diamond.collector.Collector):
 
         # get _nodes/_statistics
         result = self._get_statistics()
+        #self.log.debug('_statistics %s' % (result))
         if result:
             metrics = {}
             for node in result:
