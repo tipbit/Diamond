@@ -10,6 +10,7 @@ Collect folsom stats
 """
 
 import urllib2
+from types import *
 
 try:
     import json
@@ -42,17 +43,30 @@ class FolsomCollector(diamond.collector.Collector):
         })
         return config
 
-    def _get(self):
+    def _get_dump(self):
         url = 'http://%s:%i/_dump' % (
             self.config['host'], int(self.config['port']))
+        return self._http_get(url)
+
+    def _get_memory(self):
+        url = 'http://%s:%i/_nodes/_memory' % (
+            self.config['host'], int(self.config['port']))
+        return self._http_get(url)
+
+    def _get_statistics(self):
+        url = 'http://%s:%i/_nodes/_statistics' % (
+            self.config['host'], int(self.config['port']))
+        return self._http_get(url)
+
+    def _http_get(self, url):
         try:
             response = urllib2.urlopen(url)
+            jresponse = json.load(response)
+            #self.log.debug('http GET %s -> %s' % (url, jresponse))
+            return jresponse
         except urllib2.HTTPError, err:
             self.log.error("%s: %s", url, err)
             return False
-
-        try:
-            return json.load(response)
         except (TypeError, ValueError):
             self.log.error("Unable to parse response from folsom as a"
                            + " json object")
@@ -73,22 +87,45 @@ class FolsomCollector(diamond.collector.Collector):
             self.log.error('Unable to import json')
             return {}
 
-        result = self._get()
-        if not result:
-            return
+        # get _dump
+        result = self._get_dump()
+        if result:
+            metrics = {}
+            for metric in result:
+                for v in metric:
+                    if (metric[v]['type'] == "counter"):
+                        self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
+                    elif (metric[v]['type'] == "spiral"):
+                        self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
+                    elif (metric[v]['type'] == "meter"):
+                        self._copy_one_level(metrics, v, metric[v], lambda key: not (key.endswith('type') or key.endswith('acceleration')))
+                        self._copy_two_level(metrics, v, metric[v], lambda key: key.endswith('acceleration'))
 
-        metrics = {}
-        for metric in result:
-            for v in metric:
-                if (metric[v]['type'] == "counter"):
-                    self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
-                elif (metric[v]['type'] == "spiral"):
-                    self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
-                elif (metric[v]['type'] == "meter"):
-                    self._copy_one_level(metrics, v, metric[v], lambda key: not (key.endswith('type') or key.endswith('acceleration')))
-                    self._copy_two_level(metrics, v, metric[v], lambda key: key.endswith('acceleration'))
+            for key in metrics:
+                #print '%s = %s' % (key, metrics[key])
+                self.publish(key, metrics[key])
 
-        #print result
-        for key in metrics:
-            #print '%s = %s' % (key, metrics[key])
-            self.publish(key, metrics[key])
+        # get _nodes/_memory
+        result = self._get_memory()
+        if result:
+            for node in result:
+                for metric in result[node]:
+                    key = "%s.%s" % (node.replace('.', '_'), metric)
+                    #print '%s = %s' % (key, result[node][metric])
+                    self.publish(key, result[node][metric])
+
+        # get _nodes/_statistics
+        result = self._get_statistics()
+        if result:
+            metrics = {}
+            for node in result:
+                for m in result[node]:
+                    if (type(result[node][m]) == DictType):
+                        key = "%s.%s" % (node.replace('.', '_'), m)
+                        self._copy_one_level(metrics, key, result[node][m])
+                    else:
+                        metrics['%s.%s' % (node.replace('.', '_'), m)] = result[node][m]
+
+            for key in metrics:
+                #print '%s = %s' % (key, metrics[key])
+                self.publish(key, metrics[key])
