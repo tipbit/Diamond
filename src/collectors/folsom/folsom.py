@@ -82,6 +82,8 @@ class FolsomCollector(diamond.collector.Collector):
             for v in metric:
                 if (metric[v]['type'] == "counter"):
                     self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
+                elif (metric[v]['type'] == "spiral"):
+                    self._copy_one_level(metrics, v, metric[v], lambda key: not key.endswith('type'))
                 elif (metric[v]['type'] == "meter"):
                     self._copy_one_level(metrics, v, metric[v], lambda key: not (key.endswith('type') or key.endswith('acceleration')))
                     self._copy_two_level(metrics, v, metric[v], lambda key: key.endswith('acceleration'))
